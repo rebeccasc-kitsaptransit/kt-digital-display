@@ -6,6 +6,7 @@
     <title>Kitsap Transit - Live Departures</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.10/css/weather-icons.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -216,7 +217,7 @@
         .day-item { flex: 1; text-align: center; }
         .day-name { font-size: clamp(1rem, 1.6vw, 2rem); font-weight: 700; color: var(--slate-500); }
         .day-item img { height: clamp(50px, 8vh, 100px); margin: 0.8vh auto; display: block; filter: drop-shadow(0 4px 6px #ccc); }
-        .day-high { font-size: clamp(1.2rem, 1.9vw, 2.4rem); font-weight: 800; color: #be3b2b; }
+        .day-high { font-size: clamp(1.2rem, 1.9vw, 2.4rem); font-weight: 800; margin-top: 0.4vh;color: #1e293b; }
         .day-low  { font-size: clamp(0.9rem, 1.4vw, 1.7rem); font-weight: 600; color: #34495e; }
 
         /* HOURLY */
@@ -225,7 +226,7 @@
         .h-time { font-size: clamp(0.9rem, 1.4vw, 1.8rem); font-weight: 700; color: var(--slate-500); }
         .hour-item img { height: clamp(44px, 7vh, 90px); margin: 0.6vh auto; display: block; }
         .h-temp { font-size: clamp(1.2rem, 1.8vw, 2.4rem); font-weight: 800; color: #1e293b; }
-        .h-pop  { font-size: clamp(0.8rem, 1.2vw, 1.5rem); font-weight: 700; color: #1d4ed8; margin-top: 0.3vh; }
+        .h-pop  { font-size: clamp(0.7rem, 1.1vw, 1.3rem); font-weight: 600; margin-top: 0.2vh; }
 
         /* SPORTS */
         #slot-sports .games-list { display: flex; flex-direction: column; gap: 1.2vh; flex: 1; justify-content: center; overflow: hidden; }
@@ -382,37 +383,37 @@
                 document.getElementById('clock').innerText=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
             },1000);
 
-            async function fetchData(){
-                try {
-                    const d=await fetch('/api/data').then(r=>r.json());
+              async function fetchData(){
+        try {
+            const d=await fetch('/api/data').then(r=>r.json());
 
-                    if(d.weather?.current?.icon){
-                        document.getElementById('weather-current').innerHTML=
-                            `<div class="w-temp">${d.weather.current.temp}</div>
-                             <img src="${d.weather.current.icon}" style="height:clamp(40px,5vh,70px);" alt="${d.weather.current.desc}">`;
-                    }
+            if(d.weather?.current){
+                document.getElementById('weather-current').innerHTML=
+                    `<div class="w-temp">${d.weather.current.temp}</div>
+                     <i class="wi ${d.weather.current.icon_class}" style="font-size:clamp(40px,5vh,70px);"></i>`;
+            }
 
-                    if(d.weather?.forecast){
-                        document.getElementById('forecast-days').innerHTML=
-                            d.weather.forecast.map(f=>`
-                                <div class="day-item">
-                                    <div class="day-name">${f.day}</div>
-                                    <img src="${f.icon}" alt="${f.day}">
-                                    <div class="day-high">${f.high}</div>
-                                    <div class="day-low">${f.low}</div>
-                                </div>`).join('');
-                    }
+            if(d.weather?.forecast){
+                document.getElementById('forecast-days').innerHTML=
+                    d.weather.forecast.map(f=>`
+                        <div class="day-item">
+                            <div class="day-name">${f.day}</div>
+                            <i class="wi ${f.icon_class}" style="font-size:clamp(44px,7vh,90px);"></i>
+                            <div class="day-high">${f.high}</div>
+                            <div class="day-low">${f.low}</div>
+                        </div>`).join('');
+            }
 
-                    if(d.weather?.hourly){
-                        document.getElementById('hourly-hours').innerHTML=
-                            d.weather.hourly.map(h=>`
-                                <div class="hour-item">
-                                    <div class="h-time">${h.time}</div>
-                                    <img src="${h.icon}" alt="${h.desc}">
-                                    <div class="h-temp">${h.temp}</div>
-                                    <div class="h-pop">&#128167; ${h.pop}</div>
-                                </div>`).join('');
-                    }
+            if(d.weather?.hourly){
+                document.getElementById('hourly-hours').innerHTML=
+                    d.weather.hourly.map(h=>`
+                        <div class="hour-item">
+                            <div class="h-time">${h.time}</div>
+                            <i class="wi ${h.icon_class}" style="font-size:clamp(44px,7vh,90px);"></i>
+                            <div class="h-temp">${h.temp}</div>
+                            <div class="h-pop"><i class="wi wi-raindrop"></i> ${h.pop}</div>
+                        </div>`).join('');
+            }
 
                     allAlerts=(d.alerts||[]).filter(a=>a.trim());
                     const tWrap=document.getElementById('t-wrap');
@@ -441,70 +442,86 @@
                 } catch(e){ console.error('Fetch error:',e); }
             }
 
-            function renderSports(){
-                const container=document.getElementById('sports-games');
-                const todayStr=new Date().toDateString();
-                const tomorrowStr=new Date(Date.now()+86400000).toDateString();
-                let allGames=[], idleTeams=[];
+        function renderSports(){
+            const container=document.getElementById('sports-games');
+            const todayStr=new Date().toDateString();
+            const tomorrowStr=new Date(Date.now()+86400000).toDateString();
+            let activeGames=[], recentGames=[];
 
-                allSports.forEach(team=>{
-                    if(team.mode==='idle'){ if(team.next) idleTeams.push(team); return; }
-                    const games=(team.games||[]).filter(g=>{
-                        if(g.state==='in') return true;
-                        if(!g.date) return false;
-                        const gd=new Date(g.date).toDateString();
-                        return gd===todayStr||gd===tomorrowStr;
-                    });
-                    games.forEach(g=>allGames.push({...g,teamName:team.name}));
-                });
-
-                allGames.sort((a,b)=>{
-                    if(a.state==='in'&&b.state!=='in') return -1;
-                    if(b.state==='in'&&a.state!=='in') return 1;
-                    return new Date(a.date)-new Date(b.date);
-                });
-                allGames=allGames.slice(0,3);
-
-                if(!allGames.length&&!idleTeams.length){
-                    container.innerHTML='<div class="no-sports">No games today</div>'; return;
+            allSports.forEach(team=>{
+                if(team.mode==='idle'){
+                    if(team.last) recentGames.push({...team.last, teamName:team.name, state:'post', isRecent:true});
+                    return;
                 }
-
-                let html='';
-                allGames.forEach(g=>{
-                    const isPre=g.state==='pre', isLive=g.state==='in', isFinal=g.state==='post';
-                    const isTom=g.date&&new Date(g.date).toDateString()===tomorrowStr;
-                    const scoreHtml=(isLive||isFinal)?`<div class="game-score">${g.away_score}<br>${g.home_score}</div>`:'';
-                    let statusHtml;
-                    if(isPre){
-                        const t=g.date?new Date(g.date).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'TBD';
-                        statusHtml=`<div class="kickoff">${isTom?'Tomorrow<br>':''}${t}</div>`;
-                    } else if(isLive){
-                        statusHtml=`<div class="game-status"><span class="live-indicator"><span class="live-dot"></span> LIVE</span><br>${g.detail||''}</div>`;
-                    } else {
-                        statusHtml=`<div class="game-status">Final</div>`;
-                    }
-                    html+=`<div class="game-row">
-                        <div class="game-teams">
-                            <div class="game-team-line">${g.away_logo?`<img class="team-logo" src="${g.away_logo}" alt="">`:''}${g.away_name}</div>
-                            <div class="game-team-line">${g.home_logo?`<img class="team-logo" src="${g.home_logo}" alt="">`:''}${g.home_name}</div>
-                        </div>
-                        ${scoreHtml}${statusHtml}
-                    </div>`;
+                const games=(team.games||[]).filter(g=>{
+                    if(g.state==='in') return true;
+                    if(!g.date) return false;
+                    const gd=new Date(g.date).toDateString();
+                    return gd===todayStr||gd===tomorrowStr;
                 });
+                games.forEach(g=>activeGames.push({...g,teamName:team.name}));
+                // also collect recent finals to use as padding
+                const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+                const finals=(team.games||[]).filter(g=>g.state==='post' && new Date(g.date) > cutoff);
+                finals.forEach(g=>recentGames.push({...g,teamName:team.name,isRecent:true}));
+            });
 
-                idleTeams.forEach(team=>{
-                    html+=`<div class="sport-label">${team.name}</div>
-                        <div class="game-row">
-                            <div class="game-teams">
-                                <div class="game-team-line">${team.next.away_name} vs ${team.next.home_name}</div>
-                                <div class="game-team-line" style="font-size:clamp(0.75rem,1vw,1.2rem);color:var(--slate-500)">${team.next.date_str} &middot; ${team.next.time_str}</div>
-                            </div>
-                        </div>`;
-                });
+            activeGames.sort((a,b)=>{
+                if(a.state==='in'&&b.state!=='in') return -1;
+                if(b.state==='in'&&a.state!=='in') return 1;
+                return new Date(a.date)-new Date(b.date);
+            });
 
-                container.innerHTML=html||'<div class="no-sports">No games today</div>';
+            // pad up to 3 with recent games
+            const combined=[...activeGames];
+            for(const r of recentGames){
+                if(combined.length>=3) break;
+                combined.push(r);
             }
 
+            if(!combined.length){
+                container.innerHTML='<div class="no-sports">No games today</div>';
+                return;
+            }
+
+            // scale font based on number of games
+            const count=combined.length;
+            const teamFontSize=count===1?'clamp(1.4rem,2vw,2.6rem)':count===2?'clamp(1.1rem,1.6vw,2rem)':'clamp(0.9rem,1.3vw,1.6rem)';
+            const scoreFontSize=count===1?'clamp(1.8rem,2.6vw,3.2rem)':count===2?'clamp(1.4rem,2vw,2.4rem)':'clamp(1.2rem,1.8vw,2.2rem)';
+            const logoSize=count===1?'clamp(32px,4vh,52px)':count===2?'clamp(24px,3vh,42px)':'clamp(20px,2.5vh,36px)';
+
+            let html='';
+            combined.forEach(g=>{
+                const isPre=g.state==='pre', isLive=g.state==='in', isFinal=g.state==='post';
+                const isTom=g.date&&new Date(g.date).toDateString()===tomorrowStr;
+                const scoreHtml=(isLive||isFinal)?
+                    `<div class="game-score" style="font-size:${scoreFontSize}">${g.away_score}<br>${g.home_score}</div>`:'';
+                let statusHtml;
+                if(isPre){
+                    const t=g.date?new Date(g.date).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'TBD';
+                    statusHtml=`<div class="kickoff">${isTom?'Tomorrow<br>':''}${t}</div>`;
+                } else if(isLive){
+                    statusHtml=`<div class="game-status"><span class="live-indicator"><span class="live-dot"></span> LIVE</span><br>${g.detail||''}</div>`;
+                } else {
+                    statusHtml=`<div class="game-status">${g.isRecent?'Yesterday':'Final'}</div>`;
+                }
+                html+=`<div class="game-row">
+                    <div class="game-teams">
+                        <div class="game-team-line" style="font-size:${teamFontSize}">
+                            ${g.away_logo?`<img class="team-logo" style="height:${logoSize};width:${logoSize}" src="${g.away_logo}" alt="">`:''}
+                            ${g.away_name}
+                        </div>
+                        <div class="game-team-line" style="font-size:${teamFontSize}">
+                            ${g.home_logo?`<img class="team-logo" style="height:${logoSize};width:${logoSize}" src="${g.home_logo}" alt="">`:''}
+                            ${g.home_name}
+                        </div>
+                    </div>
+                    ${scoreHtml}${statusHtml}
+                </div>`;
+            });
+
+            container.innerHTML=html||'<div class="no-sports">No games today</div>';
+        }
             function updateDots(){
                 document.getElementById('slot-dots').innerHTML=
                     activeSlots.map((_,i)=>`<div class="slot-dot${i===slotIdx?' active':''}"></div>`).join('');
