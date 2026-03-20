@@ -1,4 +1,4 @@
-
+#  OWM_API_KEY = "d7372b7598f7c2e4b5790dbc9404e5ab" 
 
 from flask import Flask, render_template, jsonify
 from google.transit import gtfs_realtime_pb2
@@ -14,7 +14,7 @@ app = Flask(__name__)
 # --- CONFIGURATION ---
 TRIPS_URL   = "https://kttracker.com/gtfsrt/trips"
 ALERTS_URL  = "https://cdn.simplifytransit.com/alerts/service-alerts.pb"
-OWM_API_KEY = "OWM_API_KEY"   # OPENWEATHERMAP API KEY  
+OWM_API_KEY = "d7372b7598f7c2e4b5790dbc9404e5ab"   # OPENWEATHERMAP API KEY
 LAT, LON    = "47.5673", "-122.6329"
 LA_TZ       = ZoneInfo("America/Los_Angeles")
 
@@ -105,43 +105,84 @@ def get_active_services(target_date=None):
     return active
 
 # --- WEATHER CACHE ---
+# WMO weather code to description/icon mapping
+WMO_CODES = {
+    0: ("Clear", "01d"), 1: ("Mostly Clear", "02d"), 2: ("Partly Cloudy", "03d"), 3: ("Overcast", "04d"),
+    45: ("Fog", "50d"), 48: ("Fog", "50d"),
+    51: ("Drizzle", "09d"), 53: ("Drizzle", "09d"), 55: ("Drizzle", "09d"),
+    61: ("Rain", "10d"), 63: ("Rain", "10d"), 65: ("Heavy Rain", "10d"),
+    71: ("Snow", "13d"), 73: ("Snow", "13d"), 75: ("Heavy Snow", "13d"),
+    80: ("Showers", "09d"), 81: ("Showers", "09d"), 82: ("Heavy Showers", "09d"),
+    95: ("Thunderstorm", "11d"), 96: ("Thunderstorm", "11d"), 99: ("Thunderstorm", "11d"),
+}
+
+def wmo_icon(code, daytime=True):
+    desc, icon = WMO_CODES.get(code, ("Cloudy", "03d"))
+    if not daytime: icon = icon.replace("d", "n")
+    return desc, f"https://openweathermap.org/img/wn/{icon}@2x.png"
+
 weather_cache = {"data": {"current": {"temp": "--", "desc": "Loading..."}, "forecast": [], "hourly": []}, "last_fetched": 0}
 
 def get_weather():
     now = time.time()
-    if now - weather_cache["last_fetched"] > 900 and OWM_API_KEY != "OWM_API_KEY":
+    if now - weather_cache["last_fetched"] > 900:
         try:
-            cur  = requests.get(f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={OWM_API_KEY}&units=imperial", timeout=5).json()
-            fore = requests.get(f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OWM_API_KEY}&units=imperial", timeout=5).json()
-            if "main" in cur:
-                weather_cache["data"]["current"] = {
-                    "temp": f"{int(cur['main']['temp'])}\u00b0F",
-                    "desc": cur["weather"][0]["main"],
-                    "icon": f"https://openweathermap.org/img/wn/{cur['weather'][0]['icon']}@2x.png"
-                }
-                # 5-day forecast (daily highs/lows)
-                daily = {}
-                for item in fore["list"]:
-                    day = datetime.datetime.fromtimestamp(item["dt"], tz=LA_TZ).strftime("%A")[:3]
-                    if day == datetime.datetime.now(LA_TZ).strftime("%A")[:3]: continue
-                    if day not in daily: daily[day] = {"day": day, "high": -999, "low": 999, "icon": item["weather"][0]["icon"].replace('n','d')}
-                    if item["main"]["temp"] > daily[day]["high"]: daily[day]["high"] = item["main"]["temp"]
-                    if item["main"]["temp"] < daily[day]["low"]:  daily[day]["low"]  = item["main"]["temp"]
-                weather_cache["data"]["forecast"] = [
-                    {"day": d["day"].upper(), "high": f"{int(d['high'])}\u00b0", "low": f"{int(d['low'])}\u00b0",
-                     "icon": f"https://openweathermap.org/img/wn/{d['icon']}@2x.png"}
-                    for d in list(daily.values())[:5]
-                ]
-                # Hourly — next 5 slots (3hr intervals from OWM free tier)
-                weather_cache["data"]["hourly"] = [
-                    {"time": datetime.datetime.fromtimestamp(item["dt"], tz=LA_TZ).strftime("%I%p").lstrip("0").lower(),
-                     "temp": f"{int(item['main']['temp'])}\u00b0",
-                     "desc": item["weather"][0]["main"],
-                     "icon": f"https://openweathermap.org/img/wn/{item['weather'][0]['icon']}@2x.png",
-                     "pop":  f"{int(item.get('pop', 0) * 100)}%"}
-                    for item in fore["list"][:5]
-                ]
-                weather_cache["last_fetched"] = now
+            url = (
+                "https://api.open-meteo.com/v1/forecast"
+                "?latitude=47.5673&longitude=-122.6329"
+                "&current=temperature_2m,weathercode"
+                "&hourly=temperature_2m,precipitation_probability,weathercode"
+                "&daily=weathercode,temperature_2m_max,temperature_2m_min"
+                "&temperature_unit=fahrenheit"
+                "&timezone=America%2FLos_Angeles"
+                "&forecast_days=6"
+            )
+            d = requests.get(url, timeout=5).json()
+
+            # Current
+            cur_temp = int(d["current"]["temperature_2m"])
+            cur_code = d["current"]["weathercode"]
+            cur_desc, cur_icon = wmo_icon(cur_code)
+            weather_cache["data"]["current"] = {
+                "temp": f"{cur_temp}°F",
+                "desc": cur_desc,
+                "icon": cur_icon
+            }
+
+            # Daily forecast (start with today)
+            daily = d["daily"]
+            forecast = []
+            for i in range(0, 5):
+                date = datetime.datetime.strptime(daily["time"][i], "%Y-%m-%d")
+                desc, icon = wmo_icon(daily["weathercode"][i])
+                forecast.append({
+                    "day":  date.strftime("%a").upper(),
+                    "high": f"{int(daily['temperature_2m_max'][i])}°",
+                    "low":  f"{int(daily['temperature_2m_min'][i])}°",
+                    "icon": icon
+                })
+            weather_cache["data"]["forecast"] = forecast
+
+            # Hourly (next 5 slots from current hour)
+            hourly = d["hourly"]
+            now_dt = datetime.datetime.now(LA_TZ)
+            current_hour = now_dt.hour
+            start = current_hour + (2 - current_hour % 2)
+            indices = [start + i*2 for i in range(5)]
+            slots = []
+            for i in indices:
+                t = datetime.datetime.strptime(hourly["time"][i], "%Y-%m-%dT%H:%M")
+                desc, icon = wmo_icon(hourly["weathercode"][i])
+                slots.append({
+                    "time": t.strftime("%I%p").lstrip("0"),
+                    "temp": f"{int(hourly['temperature_2m'][i])}°",
+                    "desc": desc,
+                    "icon": icon,
+                    "pop":  f"{hourly['precipitation_probability'][i]}%"
+                })
+            weather_cache["data"]["hourly"] = slots
+            weather_cache["last_fetched"] = now
+
         except Exception as e:
             print(f"⚠️ Weather fetch error: {e}")
     return weather_cache["data"]
